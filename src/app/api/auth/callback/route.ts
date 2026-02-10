@@ -52,8 +52,8 @@ export async function GET(req: NextRequest) {
     // Set session cookie
     res.cookies.set("session", sessionJwt, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: false,
+      sameSite: "none",
+      secure: true,
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
