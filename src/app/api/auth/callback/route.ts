@@ -10,28 +10,46 @@ export async function GET(req: NextRequest) {
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
 
-    if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 });
+    if (!code) {
+      return NextResponse.json({ error: "Missing code" }, { status: 400 });
+    }
 
+    // Read cookies set by /api/auth/login
     const cookieState = req.cookies.get("oauth_state")?.value;
     const verifier = req.cookies.get("pkce_verifier")?.value;
 
-    if (!cookieState || !state || state !== cookieState) {
+    if (!state || !cookieState || state !== cookieState) {
       return NextResponse.json({ error: "Invalid state" }, { status: 400 });
     }
     if (!verifier) {
       return NextResponse.json({ error: "Missing PKCE data" }, { status: 400 });
     }
 
-    const oauth = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    );
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+    const appBaseUrl = process.env.APP_BASE_URL;
+
+    if (!clientId || !clientSecret || !redirectUri || !appBaseUrl) {
+      return NextResponse.json(
+        {
+          error: "Missing env vars",
+          missing: {
+            GOOGLE_CLIENT_ID: !clientId,
+            GOOGLE_CLIENT_SECRET: !clientSecret,
+            GOOGLE_REDIRECT_URI: !redirectUri,
+            APP_BASE_URL: !appBaseUrl,
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    const oauth = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
     const { tokens } = await oauth.getToken({
       code,
       codeVerifier: verifier,
-      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
     });
 
     oauth.setCredentials(tokens);
@@ -47,21 +65,33 @@ export async function GET(req: NextRequest) {
       tokens,
     });
 
-    const res = NextResponse.redirect(process.env.APP_BASE_URL!);
+    const res = NextResponse.redirect(appBaseUrl);
 
-    // Set session cookie
+    // ✅ Cross-site session cookie so Base44 can call /api/auth/me with credentials: "include"
     res.cookies.set("session", sessionJwt, {
-  httpOnly: true,
-  secure: true,
-  sameSite: "none",
-  path: "/",
-  maxAge: 60 * 60 * 24 * 7,
-});
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
 
+    // Clear temp cookies (use sameSite/secure/path consistently)
+    res.cookies.set("pkce_verifier", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: 0,
+    });
 
-    // Clear temp cookies
-    res.cookies.set("pkce_verifier", "", { path: "/", maxAge: 0 });
-    res.cookies.set("oauth_state", "", { path: "/", maxAge: 0 });
+    res.cookies.set("oauth_state", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: 0,
+    });
 
     return res;
   } catch (err: any) {
