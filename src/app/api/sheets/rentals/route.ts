@@ -1,17 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getSheetsClient } from "@/lib/google";
 
-export async function GET(_req: NextRequest) {
+export const runtime = "nodejs";
+
+export async function GET(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session?.tokens) {
+    const session = await getSession(req);
+
+    if (!session || !session.tokens) {
       return NextResponse.json({ error: "Not logged in" }, { status: 401 });
     }
 
     const sheets = getSheetsClient(session.tokens);
 
-    const spreadsheetId = process.env.SHEETS_ID!;
+    const spreadsheetId = process.env.SHEETS_ID;
     const range = process.env.SHEETS_RANGE || "Monsey!A:Z";
 
     if (!spreadsheetId) {
