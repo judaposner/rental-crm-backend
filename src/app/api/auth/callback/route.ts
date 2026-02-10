@@ -51,12 +51,13 @@ export async function GET(req: NextRequest) {
 
     // Set session cookie
     res.cookies.set("session", sessionJwt, {
-      httpOnly: true,
-      sameSite: "none",
-      secure: true,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
+  path: "/",
+  maxAge: 60 * 60 * 24 * 7,
+});
+
 
     // Clear temp cookies
     res.cookies.set("pkce_verifier", "", { path: "/", maxAge: 0 });
