@@ -1,82 +1,65 @@
 import { NextResponse, type NextRequest } from "next/server";
-import crypto from "crypto";
+import { google } from "googleapis";
 
 export const runtime = "nodejs";
 
-function base64url(input: Buffer) {
-  return input
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
+function cors(req: NextRequest, res: NextResponse) {
+  const origin = req.headers.get("origin") || "";
+  const allow = process.env.APP_BASE_URL || "https://rental-deal-flow.base44.app";
 
-function sha256(verifier: string) {
-  return crypto.createHash("sha256").update(verifier).digest();
-}
-
-export async function GET(_req: NextRequest) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
-
-  if (!clientId || !redirectUri) {
-    return NextResponse.json(
-      {
-        error: "Missing env vars",
-        missing: {
-          GOOGLE_CLIENT_ID: !clientId,
-          GOOGLE_REDIRECT_URI: !redirectUri,
-        },
-      },
-      { status: 500 }
-    );
+  if (origin === allow) {
+    res.headers.set("Access-Control-Allow-Origin", origin);
   }
+  res.headers.set("Access-Control-Allow-Credentials", "true");
+  res.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+  res.headers.set("Vary", "Origin");
+}
 
-  // PKCE
-  const verifier = base64url(crypto.randomBytes(32));
-  const challenge = base64url(sha256(verifier));
+function setCookie(res: NextResponse, name: string, value: string, maxAgeSeconds: number) {
+  const cookie =
+    `${name}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; Secure; SameSite=None; Partitioned`;
 
-  // CSRF state
-  const state = base64url(crypto.randomBytes(16));
+  res.headers.append("Set-Cookie", cookie);
+}
 
-  const scope = [
-    "openid",
-    "email",
-    "profile",
-    "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/spreadsheets",
-  ].join(" ");
+export async function OPTIONS(req: NextRequest) {
+  const res = new NextResponse(null, { status: 204 });
+  cors(req, res);
+  return res;
+}
 
-  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", scope);
-  authUrl.searchParams.set("access_type", "offline");
-  authUrl.searchParams.set("prompt", "consent");
-  authUrl.searchParams.set("state", state);
-  authUrl.searchParams.set("code_challenge", challenge);
-  authUrl.searchParams.set("code_challenge_method", "S256");
+export async function GET(req: NextRequest) {
+  const clientId = process.env.GOOGLE_CLIENT_ID!;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI!;
 
-  const res = NextResponse.redirect(authUrl.toString());
+  const oauth2 = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
-  // ✅ Critical for cross-site OAuth (Base44 -> Vercel)
-  // These MUST be SameSite=None + Secure so the browser sends them on the callback.
-  res.cookies.set("oauth_state", state, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    path: "/",
-    maxAge: 60 * 10, // 10 minutes
+  const verifier = crypto.randomUUID() + crypto.randomUUID();
+  const challenge = Buffer.from(verifier).toString("base64url");
+  const state = crypto.randomUUID();
+
+  const authUrl = oauth2.generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent",
+    scope: [
+      "openid",
+      "email",
+      "profile",
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/spreadsheets",
+    ],
+    state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
   });
 
-  res.cookies.set("pkce_verifier", verifier, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    path: "/",
-    maxAge: 60 * 10,
-  });
+  const res = NextResponse.redirect(authUrl);
+  cors(req, res);
+
+  setCookie(res, "oauth_state", state, 600);
+  setCookie(res, "pkce_verifier", verifier, 600);
 
   return res;
 }
