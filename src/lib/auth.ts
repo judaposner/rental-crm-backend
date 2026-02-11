@@ -36,8 +36,7 @@ export async function verifySession(req: NextRequest): Promise<SessionPayload | 
   }
 }
 
-// OAuth "state" is a signed JWT that carries PKCE verifier.
-// This avoids relying on cross-site cookies for state verification.
+// OAuth state (PKCE verifier) – no cookies needed
 export type OAuthStatePayload = { v: string; t: number };
 
 export async function signOAuthState(data: OAuthStatePayload) {
@@ -64,6 +63,7 @@ export function setSessionCookie(res: Response, jwt: string) {
     "HttpOnly",
     "Secure",
     "SameSite=None",
+    "Partitioned",          // ← THIS FIXES THE LOOP IN CHROME
     `Max-Age=${60 * 60 * 24 * 7}`,
   ];
   res.headers.append("Set-Cookie", parts.join("; "));
@@ -76,6 +76,7 @@ export function clearSessionCookie(res: Response) {
     "HttpOnly",
     "Secure",
     "SameSite=None",
+    "Partitioned",
     "Max-Age=0",
   ];
   res.headers.append("Set-Cookie", parts.join("; "));
