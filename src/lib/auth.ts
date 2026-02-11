@@ -1,38 +1,82 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest } from "next/server";
 
-export type SessionUser = {
+const SESSION_COOKIE = "session";
+
+function getSecretKey() {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("Missing SESSION_SECRET");
+  return new TextEncoder().encode(secret);
+}
+
+export type SessionPayload = {
   email: string;
   name?: string;
   picture?: string;
   tokens?: any;
 };
 
-function getSecretKey() {
-  const secret = process.env.SESSION_SECRET || "";
-  if (!secret) throw new Error("Missing SESSION_SECRET");
-  return new TextEncoder().encode(secret);
-}
-
-export async function signSession(payload: SessionUser) {
-  const key = getSecretKey();
+export async function signSession(payload: SessionPayload) {
   return await new SignJWT(payload as any)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(key);
+    .sign(getSecretKey());
 }
 
-export async function getSession(req: NextRequest): Promise<SessionUser | null> {
-  const token = req.cookies.get("session")?.value;
+export async function verifySession(req: NextRequest): Promise<SessionPayload | null> {
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
   try {
-    const key = getSecretKey();
-    const { payload } = await jwtVerify(token, key);
-    return payload as unknown as SessionUser;
+    const { payload } = await jwtVerify(token, getSecretKey());
+    return payload as unknown as SessionPayload;
   } catch {
     return null;
   }
 }
 
+// OAuth "state" is a signed JWT that carries PKCE verifier.
+// This avoids relying on cross-site cookies for state verification.
+export type OAuthStatePayload = { v: string; t: number };
+
+export async function signOAuthState(data: OAuthStatePayload) {
+  return await new SignJWT(data as any)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("10m")
+    .sign(getSecretKey());
+}
+
+export async function verifyOAuthState(state: string): Promise<OAuthStatePayload | null> {
+  try {
+    const { payload } = await jwtVerify(state, getSecretKey());
+    return payload as unknown as OAuthStatePayload;
+  } catch {
+    return null;
+  }
+}
+
+export function setSessionCookie(res: Response, jwt: string) {
+  const parts = [
+    `${SESSION_COOKIE}=${jwt}`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    "SameSite=None",
+    `Max-Age=${60 * 60 * 24 * 7}`,
+  ];
+  res.headers.append("Set-Cookie", parts.join("; "));
+}
+
+export function clearSessionCookie(res: Response) {
+  const parts = [
+    `${SESSION_COOKIE}=`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    "SameSite=None",
+    "Max-Age=0",
+  ];
+  res.headers.append("Set-Cookie", parts.join("; "));
+}

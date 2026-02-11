@@ -3,44 +3,36 @@ import { verifySession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-function cors(req: NextRequest, res: NextResponse) {
-  const origin = req.headers.get("origin") || "";
-  const allow = process.env.APP_BASE_URL || "https://rental-deal-flow.base44.app";
+function corsify(req: NextRequest, res: NextResponse) {
+  const origin = req.headers.get("origin");
+  const allowed = new Set([
+    "http://localhost:3000",
+    "https://rental-deal-flow.base44.app",
+  ]);
 
-  if (origin === allow) {
+  if (origin && allowed.has(origin)) {
     res.headers.set("Access-Control-Allow-Origin", origin);
+    res.headers.set("Access-Control-Allow-Credentials", "true");
+    res.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+    res.headers.set("Vary", "Origin");
   }
-
-  res.headers.set("Access-Control-Allow-Credentials", "true");
-  res.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS");
-  res.headers.set("Access-Control-Allow-Headers", "Content-Type");
-  res.headers.set("Vary", "Origin");
-}
-
-export async function OPTIONS(req: NextRequest) {
-  const res = new NextResponse(null, { status: 204 });
-  cors(req, res);
   return res;
 }
 
-export async function GET(req: NextRequest) {
-  const session = req.cookies.get("session")?.value;
-
-  if (!session) {
-    return NextResponse.json({ loggedIn: false });
-  }
-
-  const data = await verifySession(session);
-
-  if (!data) {
-    return NextResponse.json({ loggedIn: false });
-  }
-
-  return NextResponse.json({
-    loggedIn: true,
-    email: data.email,
-    name: data.name,
-    picture: data.picture,
-  });
+export async function OPTIONS(req: NextRequest) {
+  return corsify(req, new NextResponse(null, { status: 204 }));
 }
 
+export async function GET(req: NextRequest) {
+  const session = await verifySession(req);
+
+  const res = NextResponse.json(
+    session
+      ? { loggedIn: true, email: session.email, name: session.name, picture: session.picture }
+      : { loggedIn: false },
+    { status: 200 }
+  );
+
+  return corsify(req, res);
+}
