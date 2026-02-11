@@ -1,0 +1,47 @@
+cat > src/app/api/auth/me/route.ts <<'EOF'
+import { NextResponse, type NextRequest } from "next/server";
+import { verifySession } from "@/lib/auth";
+
+export const runtime = "nodejs";
+
+const ALLOWED_ORIGINS = new Set([
+  "http://localhost:3000",
+  "https://rental-deal-flow.base44.app",
+]);
+
+function withCors(req: NextRequest, res: NextResponse) {
+  const origin = req.headers.get("origin");
+
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.headers.set("Access-Control-Allow-Origin", origin);
+    res.headers.set("Access-Control-Allow-Credentials", "true");
+    res.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+    res.headers.set("Vary", "Origin");
+  }
+  return res;
+}
+
+export function OPTIONS(req: NextRequest) {
+  return withCors(req, new NextResponse(null, { status: 204 }));
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await verifySession(req);
+
+    const res = NextResponse.json({
+      loggedIn: true,
+      email: session.email,
+      name: session.name,
+      picture: session.picture,
+    });
+
+    return withCors(req, res);
+  } catch {
+    const res = NextResponse.json({ loggedIn: false }, { status: 200 });
+    return withCors(req, res);
+  }
+}
+EOF
+
