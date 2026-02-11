@@ -3,8 +3,9 @@ import { verifySession } from "@/lib/auth";
 import { google } from "googleapis";
 
 function corsify(req: NextRequest, res: NextResponse) {
-  const origin = req.headers.get("origin") || "";
-  const allowed = new Set(["https://rental-deal-flow.base44.app", "http://localhost:3000", "https://rental-deal-flow.base44.app/", "http://localhost:3000/"]);
+  let origin = req.headers.get("origin") || "";
+  if (origin.endsWith("/")) origin = origin.slice(0, -1);  // Handle trailing slash
+  const allowed = new Set(["https://rental-deal-flow.base44.app", "http://localhost:3000"]);
   if (allowed.has(origin)) {
     res.headers.set("Access-Control-Allow-Origin", origin);
     res.headers.set("Access-Control-Allow-Credentials", "true");
@@ -36,24 +37,20 @@ export async function GET(req: NextRequest) {
 
     const rows = response.data.values || [];
     const tenants = rows.slice(1).map((row) => ({  // Map to your columns
-      id: row[0],
-      name: row[1],
-      phone: row[2],
-      address: row[3],
-      apartment: row[4],
-      neighborhood: row[5],
-      town: row[6],
-      appointmentType: row[7],
-      appointmentTime: row[8],
-      notes: row[9],
-      rentSale: row[10],
-      type: row[11],
-      email: row[12],
-      rent: row[13],
-      leaseTerm: row[14],
-      utilities: row[15],
-      sqft: row[16],
-      // Add more if needed
+      name: row[0],
+      phone: row[1],
+      location: row[2],
+      budget: row[3],
+      amenities: row[4],
+      desiredBedsBath: row[5],
+      requestedNotes: row[6],
+      looking: row[7],
+      shownInPast: row[8],
+      sentAddresses: row[9],
+      response: row[10],
+      matchingProperty: row[11],
+      moveInDate: row[12],
+      tenantId: row[13],
     }));
 
     return corsify(req, NextResponse.json({ tenants }));
@@ -84,9 +81,9 @@ export async function POST(req: NextRequest) {
 
     // Map body to your columns (adjust order)
     const newRow = [
-      newId, body.name, body.phone, body.address, body.apartment, body.neighborhood, body.town,
-      body.appointmentType, body.appointmentTime, body.notes, body.rentSale, body.type,
-      body.email, body.rent, body.leaseTerm, body.utilities, body.sqft
+      body.name, body.phone, body.location, body.budget, body.amenities, body.desiredBedsBath,
+      body.requestedNotes, body.looking, body.shownInPast, body.sentAddresses, body.response,
+      body.matchingProperty, body.moveInDate, body.tenantId
     ];
 
     await sheets.spreadsheets.values.append({
