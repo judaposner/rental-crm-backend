@@ -32,11 +32,12 @@ export async function GET(req: NextRequest) {
     const sheets = google.sheets({ version: "v4", auth: oauth });
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: "Monsey!A:AE",  // Up to 'Unit ID' column (30 columns)
+      range: "Monsey!A:AD",  // ~30 columns
     });
 
     const rows = response.data.values || [];
     const units = rows.slice(1).map((row) => ({
+      forRent: row[0],
       term: row[1],
       permission: row[2],
       pictures: row[3],
@@ -51,9 +52,9 @@ export async function GET(req: NextRequest) {
       notes: row[12],
       rentSale: row[13],
       type: row[14],
-      propertyContact: row[15],
+      empty1: row[15],  // Empty column
       email: row[16],
-      website: row[17],
+      empty2: row[17],
       rent: row[18],
       leaseTerm: row[19],
       utilities: row[20],
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
     return corsify(req, NextResponse.json({ units }));
   } catch (err: any) {
     console.error("Units Sheets GET error:", err.message, err.response ? err.response.data : '');
-    return corsify(req, NextResponse.json({ error: "Failed to fetch units" }, { status: 500 }));
+    return corsify(req, NextResponse.json({ error: "Failed to fetch units", detail: err.message }, { status: 500 }));
   }
 }
 
@@ -88,21 +89,21 @@ export async function POST(req: NextRequest) {
 
     const getResponse = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: "Monsey!A:AE",
+      range: "Monsey!A:AD",
     });
     const rows = getResponse.data.values || [];
-    const newId = rows.length;  // Row number as ID
+    const newId = rows.length;
 
     const newRow = [
-      '', body.term, body.permission, body.pictures, body.name, body.phone, body.address, body.apartment,
+      body.forRent, body.term, body.permission, body.pictures, body.name, body.phone, body.address, body.apartment,
       body.neighborhood, body.town, body.appointmentType, body.appointmentTime, body.notes, body.rentSale,
-      body.type, body.propertyContact, body.email, body.website, body.rent, body.leaseTerm, body.utilities, body.sqft,
+      body.type, body.empty1, body.email, body.empty2, body.rent, body.leaseTerm, body.utilities, body.sqft,
       body.bedroom, body.bath, body.appliances, body.amenities, body.pets, body.posted, body.comission, body.unitId
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: "Monsey!A:AE",
+      range: "Monsey!A:AD",
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [newRow] },
     });
@@ -110,6 +111,6 @@ export async function POST(req: NextRequest) {
     return corsify(req, NextResponse.json({ unit: { id: newId, ...body } }, { status: 201 }));
   } catch (err: any) {
     console.error("Units Sheets POST error:", err.message, err.response ? err.response.data : '');
-    return corsify(req, NextResponse.json({ error: "Failed to add unit" }, { status: 500 }));
+    return corsify(req, NextResponse.json({ error: "Failed to add unit", detail: err.message }, { status: 500 }));
   }
 }
