@@ -40,11 +40,16 @@ export async function GET(req: NextRequest) {
     const code = req.nextUrl.searchParams.get("code");
     const state = req.nextUrl.searchParams.get("state");
 
+    console.log("Received state:", state);  // Log for debugging
+
     if (!code) return NextResponse.json({ error: "Missing code" }, { status: 400 });
     if (!state) return NextResponse.json({ error: "Missing state" }, { status: 400 });
 
     const statePayload = await verifyOAuthState(state);
-    if (!statePayload?.v) return NextResponse.json({ error: "Invalid state" }, { status: 400 });
+    if (!statePayload?.v) {
+      console.log("State validation failed for state:", state);  // Log for debugging
+      return NextResponse.json({ error: "Invalid state" }, { status: 400 });
+    }
 
     const oauth = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
